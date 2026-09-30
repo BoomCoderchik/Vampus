@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "docs:check": "node scripts/verify-docs.mjs",
+    "docs:contrast": "node scripts/contrast.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",

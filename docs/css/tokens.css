@@ -1,0 +1,327 @@
+/* ==========================================================================
+   FANG RUSH — DESIGN TOKENS  (single source of truth)
+   --------------------------------------------------------------------------
+   Three layers (ui-ux-pro-max "design-system" rule):
+     1. PRIMITIVE  raw values, never used directly in components
+     2. SEMANTIC   purpose aliases (what the value MEANS)
+     3. COMPONENT  per-component bindings (see components.css)
+
+   Every value below is lifted from the shipped game:
+     - colours / gameplay constants : src/game/engine.ts
+     - UI colours / motion          : src/index.css, src/components/*.tsx
+   `npm run docs:check` (scripts/verify-docs.mjs) fails if the gameplay
+   constants here drift from engine.ts.
+
+   Conventions
+     --fr-*        public token            --_*   private to one rule
+     *-n           unitless number (for calc())
+     r-units       geometry in models.css is expressed as a multiple of the
+                   entity radius `--r` (1 r-unit == the entity's radius)
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* ======================================================================
+     1. PRIMITIVE TOKENS
+     ====================================================================== */
+
+  /* ---- Palette: night / ink -------------------------------------------- */
+  --fr-p-night-950: #07030c;          /* page + canvas clear colour          */
+  --fr-p-night-900: #0a0410;          /* vampire hair                        */
+  --fr-p-night-850: #12060f;          /* vampire cape (outer)                */
+  --fr-p-night-800: #160812;          /* lunge-button inner disc             */
+  --fr-p-night-750: #1a0b18;          /* vampire body                        */
+  --fr-p-night-panel: #0c0512;        /* panel gradient end (rgb 12,5,18)    */
+  --fr-p-wine-panel: #500a1e;         /* panel gradient start (rgb 80,10,30) */
+
+  /* ---- Palette: blood -------------------------------------------------- */
+  --fr-p-blood-950: #4a0810;          /* button lip / hard text-shadow       */
+  --fr-p-blood-800: #8b0f1f;          /* cape lining                         */
+  --fr-p-blood-700: #9c0f20;          /* button gradient end                 */
+  --fr-p-blood-600: #c4162b;          /* brand red (collar, tabs)            */
+  --fr-p-blood-550: #c1121f;          /* blood particle                      */
+  --fr-p-blood-500: #e0263c;          /* button gradient start               */
+  --fr-p-blood-400: #ff3b4a;          /* bright red (title, HUD accents)     */
+  --fr-p-blood-300: #ff2a3c;          /* vampire eyes                        */
+  --fr-p-blood-wound: #b3121f;        /* bite marks on corpses               */
+  --fr-p-blood-fountain: #9b1020;     /* fountain glint                      */
+
+  /* ---- Palette: gold / reward ----------------------------------------- */
+  --fr-p-gold-900: #3d2a00;           /* score text-shadow                   */
+  --fr-p-gold-400: #ffd166;           /* score, bonus sparks, badges         */
+  --fr-p-gold-200: #fff5cc;           /* shimmer highlight                   */
+  --fr-p-gold-crown: #ffd24a;         /* noble crown                         */
+
+  /* ---- Palette: bone / text -------------------------------------------- */
+  --fr-p-bone-100: #e9e0f2;           /* body text, vampire skin             */
+  --fr-p-bone-200: #d9d3e6;           /* corpse skin                         */
+  --fr-p-white: #ffffff;
+
+  /* ---- Palette: signals ------------------------------------------------ */
+  --fr-p-green-300: #7cff9c;          /* "+time" text                        */
+  --fr-p-violet-300: #e0aaff;         /* noble spark + label                 */
+  --fr-p-red-soft: #ff5a5a;           /* "−5 s" / garlic hit text            */
+  --fr-p-pink-hot: #ff5a7a;           /* combo ≥ 10 text                     */
+  --fr-p-yellow-alert: #ffe066;       /* "!" alert over panicking villager   */
+  --fr-p-garlic-100: #e6f0c8;         /* garlic ring / ✝ mark                */
+  --fr-p-garlic-200: #d9f0a3;         /* hunter aura + hunter dot ring       */
+
+  /* ---- Palette: villagers --------------------------------------------- */
+  --fr-p-peasant-body: #5b7ea8;
+  --fr-p-peasant-head: #f1cfae;
+  --fr-p-peasant-hair: #5a3a24;
+  --fr-p-runner-body: #5fae6c;
+  --fr-p-runner-head: #e9c2a0;
+  --fr-p-runner-hair: #f2d35a;
+  --fr-p-runner-band: #e23b3b;
+  --fr-p-noble-body: #8a4fbf;
+  --fr-p-noble-head: #f6dcc4;
+  --fr-p-noble-hair: #e5e5e5;
+  --fr-p-hunter-body: #6b4a2f;
+  --fr-p-hunter-head: #e6b98f;
+  --fr-p-hunter-hair: #2a2a2a;
+  --fr-p-hunter-hat-brim: #1d1410;
+  --fr-p-hunter-hat-crown: #2f221a;
+  --fr-p-hunter-hat-band: #8b1a1a;
+  --fr-p-eye-ink: #1a1a1a;
+  --fr-p-corpse-eye: #333333;
+
+  /* ---- Palette: world -------------------------------------------------- */
+  --fr-p-grass-base: #152521;
+  --fr-p-grass-light: rgba(40, 80, 60, 0.35);
+  --fr-p-grass-dark: rgba(5, 15, 12, 0.4);
+  --fr-p-dirt: rgba(70, 55, 40, 0.25);
+  --fr-p-mortar: #2f2f3d;             /* path joints                         */
+  --fr-p-stone-mid: rgb(58, 58, 72);  /* mean of rgb(45..70, 45..70, +14)    */
+  --fr-p-plaza-ring: rgba(120, 120, 150, 0.35);
+  --fr-p-wall-outer: #3b2f3a;
+  --fr-p-wall-inner: #2a1f2a;
+  --fr-p-moon: rgba(140, 170, 220, 0.1);
+  --fr-p-grave: #6a6f7a;
+  --fr-p-grave-mark: #4c515c;
+  --fr-p-trunk: #3a2a1e;
+  --fr-p-trunk-core: #2a1d14;
+  --fr-p-canopy-1: #1e3a2a;
+  --fr-p-canopy-2: #2a5038;
+  --fr-p-canopy-3: #3a6a48;
+  --fr-p-fountain-rim: #5c5f75;
+  --fr-p-fountain-water: #1d3a5a;
+  --fr-p-fountain-core: #7a7d95;
+  --fr-p-fountain-ripple: rgba(160, 200, 255, 0.35);
+  --fr-p-crypt-wall: #4b4f5e;
+  --fr-p-crypt-face: #5d6273;
+  --fr-p-crypt-door: #2a2d38;
+  --fr-p-crypt-cross: #7d8294;
+  --fr-p-crypt-glow: 120, 255, 160;   /* rgb triplet, alpha 0.15…0.30        */
+  --fr-p-stain-rgb-g: 8;              /* blood stain = rgba(90..130, 8, 14)  */
+  --fr-p-stain-rgb-b: 14;
+
+  /* ---- Typography ------------------------------------------------------ */
+  --fr-p-font-display: "Cinzel", "Georgia", "Times New Roman", serif;
+  --fr-p-font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fr-p-weight-regular: 400;
+  --fr-p-weight-bold: 700;
+  --fr-p-weight-black: 900;
+
+  --fr-p-text-9: 9px;
+  --fr-p-text-10: 10px;
+  --fr-p-text-11: 11px;
+  --fr-p-text-xs: 12px;
+  --fr-p-text-sm: 14px;
+  --fr-p-text-base: 16px;
+  --fr-p-text-lg: 18px;
+  --fr-p-text-xl: 20px;
+  --fr-p-text-2xl: 24px;
+  --fr-p-text-3xl: 30px;
+  --fr-p-text-4xl: 36px;
+  --fr-p-text-5xl: 48px;
+  --fr-p-text-6xl: 60px;
+
+  --fr-p-track-wider: 0.05em;
+  --fr-p-track-widest-1: 0.15em;
+  --fr-p-track-widest-2: 0.2em;
+  --fr-p-track-widest-3: 0.25em;
+  --fr-p-track-widest-4: 0.3em;
+  --fr-p-track-widest-5: 0.35em;
+
+  /* ---- Space (4 px base, Tailwind-compatible) ------------------------- */
+  --fr-p-space-1: 4px;
+  --fr-p-space-2: 8px;
+  --fr-p-space-3: 12px;
+  --fr-p-space-4: 16px;
+  --fr-p-space-5: 20px;
+  --fr-p-space-6: 24px;
+  --fr-p-space-7: 28px;
+  --fr-p-space-8: 32px;
+
+  /* ---- Radius ---------------------------------------------------------- */
+  --fr-p-radius-md: 6px;
+  --fr-p-radius-xl: 12px;
+  --fr-p-radius-2xl: 16px;
+  --fr-p-radius-3xl: 24px;
+  --fr-p-radius-full: 9999px;
+
+  /* ---- Motion ---------------------------------------------------------- */
+  --fr-p-ease-pop: cubic-bezier(0.2, 0.9, 0.3, 1.4);
+  --fr-p-ease-rise: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --fr-p-ease-out: ease;
+  --fr-p-dur-press: 0.08s;
+  --fr-p-dur-hover: 0.12s;
+  --fr-p-dur-fade: 0.15s;
+  --fr-p-dur-pop: 0.22s;
+  --fr-p-dur-rise: 0.45s;
+  --fr-p-dur-urgent: 0.5s;
+  --fr-p-dur-shimmer: 2.2s;
+  --fr-p-dur-drip: 2.4s;
+  --fr-p-dur-float: 3s;
+  --fr-p-dur-flicker: 4s;
+  --fr-p-stagger: 0.08s;
+
+  /* ---- Breakpoints (documentation only — CSS vars cannot drive @media) - */
+  --fr-p-bp-sm: 640px;
+
+  /* ======================================================================
+     2. SEMANTIC TOKENS
+     ====================================================================== */
+
+  /* ---- Surface --------------------------------------------------------- */
+  --fr-surface-page: var(--fr-p-night-950);
+  --fr-surface-scrim-pause: rgba(0, 0, 0, 0.55);
+  --fr-surface-scrim-over: rgba(0, 0, 0, 0.5);
+  --fr-surface-tile: rgba(255, 255, 255, 0.05);
+  --fr-surface-ghost: rgba(255, 255, 255, 0.06);
+  --fr-surface-ghost-hover: rgba(255, 255, 255, 0.12);
+  --fr-surface-track: rgba(255, 255, 255, 0.15);
+
+  /* ---- Text ------------------------------------------------------------ */
+  --fr-text-primary: var(--fr-p-bone-100);
+  --fr-text-strong: var(--fr-p-white);
+  --fr-text-muted: rgba(255, 255, 255, 0.5);
+  --fr-text-subtle: rgba(255, 255, 255, 0.4);
+  --fr-text-faint: rgba(255, 255, 255, 0.3);
+  --fr-text-brand: var(--fr-p-blood-400);
+  --fr-text-reward: var(--fr-p-gold-400);
+  --fr-text-gain: var(--fr-p-green-300);
+  --fr-text-loss: var(--fr-p-red-soft);
+
+  /* ---- Border ---------------------------------------------------------- */
+  --fr-border-panel: rgba(255, 59, 74, 0.25);
+  --fr-border-ghost: rgba(255, 255, 255, 0.14);
+  --fr-border-highlight: rgba(255, 59, 74, 0.5);
+  --fr-border-reward: rgba(255, 209, 102, 0.4);
+
+  /* ---- Feedback -------------------------------------------------------- */
+  --fr-fx-blood: var(--fr-p-blood-550);
+  --fr-fx-spark: var(--fr-p-gold-400);
+  --fr-fx-garlic: rgba(230, 240, 200, 0.8);
+  --fr-fx-dust: rgba(180, 170, 160, 0.45);
+  --fr-fx-flash-hit: rgba(200, 10, 30, 0.35);      /* × flashRed   (≤ 0.9)   */
+  --fr-fx-flash-bite: rgba(255, 240, 240, 0.5);    /* × flashWhite (≤ 0.5)   */
+  --fr-fx-vignette-edge: rgba(8, 2, 16, 0.85);
+  --fr-fx-lowtime: 180, 0, 20;                     /* rgb triplet            */
+
+  /* ---- Victim keys (used by both canvas models and HUD legend dots) ---- */
+  --fr-victim-peasant: var(--fr-p-peasant-body);
+  --fr-victim-runner: var(--fr-p-runner-body);
+  --fr-victim-noble: var(--fr-p-noble-body);
+  --fr-victim-hunter: var(--fr-p-hunter-body);
+
+  /* ---- Typography roles ------------------------------------------------ */
+  --fr-font-display: var(--fr-p-font-display);
+  --fr-font-body: var(--fr-p-font-body);
+
+  /* ---- Elevation ------------------------------------------------------- */
+  --fr-shadow-panel:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 30px 80px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --fr-shadow-btn-rest: 0 6px 0 var(--fr-p-blood-950), 0 10px 24px rgba(196, 22, 43, 0.35);
+  --fr-shadow-btn-down: 0 2px 0 var(--fr-p-blood-950), 0 4px 12px rgba(196, 22, 43, 0.3);
+  --fr-shadow-lunge: 0 0 30px rgba(255, 59, 74, 0.35);
+  --fr-shadow-text-timer: 0 2px 0 var(--fr-p-blood-950), 0 0 18px rgba(255, 59, 74, 0.35);
+  --fr-shadow-text-score: 0 2px 0 var(--fr-p-gold-900);
+  --fr-shadow-text-combo: 0 0 14px rgba(255, 59, 74, 0.8), 0 2px 0 var(--fr-p-blood-950);
+
+  /* ---- Gradients ------------------------------------------------------- */
+  --fr-gradient-btn: linear-gradient(180deg, var(--fr-p-blood-500) 0%, var(--fr-p-blood-700) 100%);
+  --fr-gradient-panel: radial-gradient(
+    120% 100% at 50% 0%,
+    rgba(80, 10, 30, 0.55) 0%,
+    rgba(12, 5, 18, 0.92) 60%
+  );
+  --fr-gradient-combo-bar: linear-gradient(to right, var(--fr-p-blood-400), var(--fr-p-gold-400));
+  --fr-gradient-shimmer: linear-gradient(
+    100deg,
+    var(--fr-p-gold-400) 20%,
+    var(--fr-p-gold-200) 40%,
+    var(--fr-p-gold-400) 60%
+  );
+
+  /* ---- Layers ---------------------------------------------------------- */
+  --fr-z-canvas: 0;
+  --fr-z-hud: 1;       /* DOM order, no explicit z-index in the app          */
+  --fr-z-screen: 2;    /* menu / pause / game-over overlays                  */
+
+  /* ---- Hit targets ----------------------------------------------------- */
+  --fr-hit-min: 40px;          /* pause + mute buttons                       */
+  --fr-hit-lunge: 96px;        /* touch lunge button                         */
+  --fr-hit-lunge-inner: 76px;
+
+  /* ======================================================================
+     3. GAMEPLAY TOKENS  (mirrors src/game/engine.ts — verified by script)
+     ====================================================================== */
+  --fr-gm-world-n: 2200;               /* WORLD (px, square)                 */
+  --fr-gm-start-time-n: 60;            /* START_TIME (s)                     */
+  --fr-gm-bite-time-n: 3;              /* BITE_TIME (s)                      */
+  --fr-gm-player-r-n: 18;              /* PLAYER_R (px)                      */
+  --fr-gm-player-speed-n: 275;         /* PLAYER_SPEED (px/s)                */
+  --fr-gm-lunge-dur-n: 0.22;           /* LUNGE_DUR (s)                      */
+  --fr-gm-lunge-boost-n: 900;          /* LUNGE_BOOST (px/s peak)            */
+  --fr-gm-lunge-cd-n: 0.85;            /* LUNGE_CD (s)                       */
+  --fr-gm-combo-window-n: 2.6;         /* COMBO_WINDOW (s)                   */
+  --fr-gm-max-particles-n: 420;        /* MAX_PARTICLES                      */
+
+  --fr-gm-combo-cap-n: 10;             /* multiplier cap                     */
+  --fr-gm-garlic-penalty-n: 5;         /* hurt(): seconds lost               */
+  --fr-gm-stun-n: 0.55;                /* hurt(): stun (s)                   */
+  --fr-gm-hunter-cooldown-n: 1.6;      /* per-hunter re-hit delay (s)        */
+  --fr-gm-corpse-life-n: 9;            /* seconds before corpse is removed   */
+  --fr-gm-hunter-aggro-n: 460;         /* px                                 */
+  --fr-gm-aware-n: 270;                /* px, peasant/noble                  */
+  --fr-gm-aware-runner-n: 330;         /* px                                 */
+
+  /* Entity radii (px) — consumed by models.css as `--r` */
+  --fr-r-player: 18px;
+  --fr-r-peasant: 15px;
+  --fr-r-runner: 14px;
+  --fr-r-noble: 16px;
+  --fr-r-hunter: 17px;
+
+  /* Entity speeds (px/s) — documentation, verified by script */
+  --fr-gm-speed-peasant-n: 205;
+  --fr-gm-speed-runner-n: 315;
+  --fr-gm-speed-noble-n: 165;
+  --fr-gm-speed-hunter-n: 135;
+
+  /* Entity rewards — documentation, verified by script */
+  --fr-gm-points-peasant-n: 100;
+  --fr-gm-points-runner-n: 250;
+  --fr-gm-points-noble-n: 500;
+  --fr-gm-points-hunter-n: 400;
+  --fr-gm-time-peasant-n: 3;
+  --fr-gm-time-runner-n: 3;
+  --fr-gm-time-noble-n: 5;
+  --fr-gm-time-hunter-n: 5;
+}
+
+/* Reduced-motion contract: every animation token collapses to "instant".
+   components.css additionally disables looping decorative animations.     */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fr-p-dur-pop: 0.01s;
+    --fr-p-dur-rise: 0.01s;
+    --fr-p-dur-urgent: 0.01s;
+    --fr-p-stagger: 0s;
+  }
+}

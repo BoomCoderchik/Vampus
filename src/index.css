@@ -1,4 +1,7 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+/* Scan only the app: Tailwind 4 auto-detects every file in the repo, which would pull docs/ class names into the bundle. */
+@source "./";
+@source "../index.html";
 
 :root {
   --blood: #c4162b;
