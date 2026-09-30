@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fang Rush — UI component gallery</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="components.css">
+<style>
+  body { margin: 0; padding: 24px; background: #0d0614; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 24px; align-items: start; }
+  .frame { position: relative; min-height: 520px; background: #152521; border-radius: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .frame.hud { background: #2a2a36; }
+  .lbl { color: rgba(255,255,255,.4); font: 11px system-ui; letter-spacing: .2em; text-transform: uppercase; margin: 0 0 8px; }
+</style>
+</head>
+<body class="fr-root" style="overflow:auto">
+<div class="grid">
+
+  <section>
+    <p class="lbl">Menu panel</p>
+    <div class="frame"><div class="fr-panel fr-panel--menu fr-noselect">
+      <div class="fr-fade-up">
+        <div class="fr-bat-float" aria-hidden="true">🦇</div>
+        <h1 class="fr-title">FANG RUSH</h1>
+        <div style="display:flex;justify-content:center;gap:24px;height:16px;margin-top:4px" aria-hidden="true">
+          <span class="fr-drip">▼</span><span class="fr-drip" style="animation-delay:.8s">▼</span><span class="fr-drip" style="animation-delay:1.5s">▼</span>
+        </div>
+        <p class="fr-display" style="color:rgba(233,224,242,.8);margin:8px 0 0">You have <b style="color:#fff">60 seconds</b> to live.<br>Every bite buys <span class="fr-gain">+3 s</span>. Feast.</p>
+      </div>
+      <div class="fr-fade-up fr-delay-1" style="margin-top:20px">
+        <button class="fr-btn fr-btn--primary fr-btn--hero fr-btn--block">Hunt</button>
+        <p class="fr-hint" style="margin:8px 0 0">press Enter or Space</p>
+      </div>
+      <div class="fr-tabs fr-fade-up fr-delay-2" role="tablist" style="margin-top:20px">
+        <button class="fr-tab is-active" role="tab" aria-selected="true">HOW TO PLAY</button>
+        <button class="fr-tab" role="tab" aria-selected="false">HALL OF BLOOD</button>
+      </div>
+      <ul style="list-style:none;padding:0;margin:16px 0 0;text-align:left;display:grid;gap:6px;font-size:14px;color:rgba(255,255,255,.8)">
+        <li style="display:flex;gap:8px;align-items:center"><span class="fr-dot fr-dot--peasant"></span><b>Peasant</b> — +3 s · 100 pts</li>
+        <li style="display:flex;gap:8px;align-items:center"><span class="fr-dot fr-dot--runner"></span><b>Sprinter</b> — fast! +3 s · 250 pts</li>
+        <li style="display:flex;gap:8px;align-items:center"><span class="fr-dot fr-dot--noble"></span><b>Noble</b> — rare. +5 s · 500 pts</li>
+        <li style="display:flex;gap:8px;align-items:center"><span class="fr-dot fr-dot--hunter"></span><b>Hunter</b> — garlic! <span class="fr-loss">−5 s</span></li>
+      </ul>
+    </div></div>
+  </section>
+
+  <section>
+    <p class="lbl">HUD (playing, combo ×4, time urgent) + touch lunge</p>
+    <div class="frame hud"><div class="fr-hud">
+      <div class="fr-hud__timer"><div class="fr-eyebrow fr-eyebrow--display" style="letter-spacing:.35em;font-size:9px;color:rgba(255,255,255,.5)">Time left</div><div class="fr-hud__time is-urgent">7.4</div></div>
+      <div class="fr-hud__score-block"><div class="fr-eyebrow fr-eyebrow--display" style="letter-spacing:.35em;font-size:9px;color:rgba(255,255,255,.5)">Score</div><div class="fr-hud__score">12,400</div><div class="fr-hud__bites">🩸 14</div></div>
+      <button class="fr-icon-btn fr-btn--ghost fr-hud__pause" aria-label="Pause"><svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg></button>
+      <div class="fr-hud__combo is-visible"><div class="fr-hud__mult">×4</div><div class="fr-hud__combo-track"><div class="fr-hud__combo-bar" style="transform:scaleX(.6)"></div></div><div class="fr-eyebrow fr-eyebrow--display" style="font-size:9px;letter-spacing:.35em;margin-top:4px;color:rgba(255,255,255,.6)">combo</div></div>
+      <button class="fr-lunge fr-hud__lunge" style="--fill:.65" aria-label="Lunge"><span class="fr-lunge__disc"><span style="font-size:24px;line-height:1" aria-hidden="true">🧛</span><span class="fr-lunge__label">LUNGE</span></span></button>
+    </div></div>
+  </section>
+
+  <section>
+    <p class="lbl">Pause</p>
+    <div class="frame"><div class="fr-scrim fr-scrim--pause"><div class="fr-panel fr-panel--pause fr-fade-up">
+      <h2 class="fr-h2">PAUSED</h2>
+      <p class="fr-hint" style="margin:4px 0 0">the night holds its breath</p>
+      <div style="display:grid;gap:12px;margin-top:24px">
+        <button class="fr-btn fr-btn--primary fr-btn--md fr-btn--block">Resume</button>
+        <button class="fr-btn fr-btn--ghost fr-btn--md fr-btn--block">Restart</button>
+        <div style="display:flex;gap:12px"><button class="fr-btn fr-btn--ghost fr-btn--md" style="flex:1">Menu</button><button class="fr-btn fr-btn--ghost" style="width:56px;font-size:18px" aria-label="Sound on">🔊</button></div>
+      </div>
+    </div></div></div>
+  </section>
+
+  <section>
+    <p class="lbl">Game over (new high score)</p>
+    <div class="frame"><div class="fr-panel fr-panel--over">
+      <div class="fr-fade-up"><div style="font-size:30px" aria-hidden="true">☀️</div><h2 class="fr-h2 fr-h2--danger">THE SUN RISES</h2><p class="fr-hint" style="margin:4px 0 0">you starved in the dawn light</p></div>
+      <div style="margin-top:16px"><div class="fr-eyebrow">Score</div><div class="fr-shimmer fr-tabular" style="font:900 60px/1 var(--fr-font-display)">48,250</div>
+        <div class="fr-badge fr-pop" style="margin-top:8px">♛ NEW HIGH SCORE!</div></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px">
+        <div class="fr-tile fr-tile--stat"><div aria-hidden="true">🩸</div><div class="fr-tile__value">31</div><div class="fr-tile__label">Bites</div></div>
+        <div class="fr-tile fr-tile--stat"><div aria-hidden="true">🔥</div><div class="fr-tile__value">×10+</div><div class="fr-tile__label">Best Combo</div></div>
+        <div class="fr-tile fr-tile--stat"><div aria-hidden="true">⏳</div><div class="fr-tile__value">2:14</div><div class="fr-tile__label">Survived</div></div>
+      </div>
+      <label class="fr-field" style="margin-top:16px"><span class="fr-field__label">Name</span><input class="fr-input" value="NOSFERATU" maxlength="12" autocomplete="off" spellcheck="false" name="player-name"></label>
+      <div style="display:grid;gap:8px;margin-top:16px"><button class="fr-btn fr-btn--primary fr-btn--lg fr-btn--block">Bite Again</button><button class="fr-btn fr-btn--ghost fr-btn--sm fr-btn--block">Menu</button></div>
+      <div class="fr-scores" style="margin-top:16px;text-align:left">
+        <div class="fr-scores__head"><span>#</span><span>Name</span><span style="text-align:right">Bites</span><span style="text-align:right">Score</span></div>
+        <ul class="fr-scores__list">
+          <li class="fr-scores__row is-you"><span>1</span><span>NOSFERATU</span><span style="text-align:right">31</span><span style="text-align:right">48,250</span></li>
+          <li class="fr-scores__row"><span>2</span><span>DRACUL</span><span style="text-align:right">22</span><span style="text-align:right">31,900</span></li>
+          <li class="fr-scores__row"><span>3</span><span>LESTAT</span><span style="text-align:right">18</span><span style="text-align:right">20,300</span></li>
+        </ul>
+      </div>
+    </div></div>
+  </section>
+</div>
+</body>
+</html>

@@ -1,0 +1,784 @@
+/* ==========================================================================
+   FANG RUSH — CSS MODEL LIBRARY
+   --------------------------------------------------------------------------
+   Every on-canvas entity of the game (vampire, four villager types, corpses,
+   trees, fountain, crypt, gravestone, particles, bats, floating text, screen
+   effects) re-drawn as pure CSS, with the exact colours, proportions and draw
+   order used by `src/game/engine.ts` (drawPlayer, drawVillager, drawCorpse,
+   drawObstacleBase, drawCanopy, drawParticles, render, buildBackground).
+
+   HOW THE GEOMETRY WORKS
+   - A model is a square box, 4 r wide, where r is the entity radius.
+     The entity origin (canvas `translate(x, y)`) is the CENTRE of that box.
+   - Models face RIGHT (+x) at rotation 0, exactly like the canvas code.
+     `--facing` rotates the model (canvas `rotate(this.facing)`).
+   - Parts are positioned in r-units via  --x --y (centre)  --w --h (size):
+       left = r · (2 + x − w/2)    top = r · (2 + y − h/2)
+     so `--x:0.2; --w:1.2` means "centre at 0.2 r, diameter 1.2 r", the same
+     numbers that appear as `hx = r * 0.2` / `r * 0.6` in the canvas code.
+   - Sizes that the canvas code gives in raw pixels (eyes, bite marks, strokes)
+     stay in px.
+   - Curves drawn with quadraticCurveTo are approximated by polygons whose
+     vertices were computed from the same control points (see notes inline);
+     everything else is exact.
+   - DOM draw order == canvas draw order (first child = painted first).
+
+   USAGE (minimal)
+     <link rel="stylesheet" href="tokens.css">
+     <link rel="stylesheet" href="models.css">
+     <div class="fr-m fr-villager fr-villager--noble" style="--facing:-30deg">
+       <i class="fr-shadow"></i>
+       <div class="fr-rot"> …parts… </div>
+     </div>
+   See docs/css/models-preview.html for the full markup of every model.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   0. PRIMITIVES
+   -------------------------------------------------------------------------- */
+
+.fr-m {
+  --rn: 16;                              /* unitless radius (px)            */
+  --r: calc(var(--rn) * 1px);
+  --facing: 0deg;
+  position: relative;
+  display: block;
+  flex: none;
+  width: calc(var(--r) * 4);
+  height: calc(var(--r) * 4);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.fr-m > .fr-rot,
+.fr-m .fr-rot {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--facing));
+  transform-origin: 50% 50%;
+}
+
+/* Generic positioned part (r-units) */
+.fr-p {
+  --x: 0;
+  --y: 0;
+  --w: 1;
+  --h: 1;
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+  left: calc(var(--r) * (2 + var(--x) - var(--w) / 2));
+  top: calc(var(--r) * (2 + var(--y) - var(--h) / 2));
+  width: calc(var(--r) * var(--w));
+  height: calc(var(--r) * var(--h));
+}
+.fr-p--round { border-radius: 50%; }
+
+/* Generic positioned part (px) — centre at (--cx, --cy) in px, radii --rx/--ry.
+   Used for props whose canvas code is in raw pixels (trees, fountain, ...). */
+.fr-abs {
+  --cx: 0;
+  --cy: 0;
+  --rx: 10;
+  --ry: 10;
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+  left: calc((var(--cx) - var(--rx)) * 1px);
+  top: calc((var(--cy) - var(--ry)) * 1px);
+  width: calc(var(--rx) * 2px);
+  height: calc(var(--ry) * 2px);
+  border-radius: 50%;
+}
+/* rectangle in px: top-left at (--x, --y) relative to the prop origin */
+.fr-rect {
+  --x: 0;
+  --y: 0;
+  --w: 10;
+  --h: 10;
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+  left: calc(var(--x) * 1px);
+  top: calc(var(--y) * 1px);
+  width: calc(var(--w) * 1px);
+  height: calc(var(--h) * 1px);
+}
+/* zero-size anchor for a prop; children are placed relative to its origin */
+.fr-prop {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Ground shadow: ellipse(x+3, y+r*0.55, r*1.05, r*0.5) rgba(0,0,0,.35).
+   Never rotates with the entity. */
+.fr-shadow {
+  position: absolute;
+  display: block;
+  left: calc(var(--r) * (2 - 1.05) + 3px);
+  top: calc(var(--r) * (2 + 0.55 - 0.5));
+  width: calc(var(--r) * 2.1);
+  height: calc(var(--r) * 1);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* --------------------------------------------------------------------------
+   1. THE VAMPIRE  (drawPlayer, r = 18)
+   Draw order: cape → cape lining → body → collar ×2 → head → hair →
+               widow's peak → eyes → fangs → "lunge ready" ring
+   State hooks (set as inline custom props or modifier classes):
+     --lunge:  0…1  (lungeT / LUNGE_DUR) squash & stretch amount
+     --flare:  1…1.7 cape flare (1 + min(speed/275, 1.4) · 0.5)
+     --glow:   eye shadowBlur in px (6 + hungry·10 + lunge·8)
+     .is-flash body turns white (pflash > 0.5, right after a bite)
+     .is-fangs fangs visible (lunging or hungry > 0.5, i.e. time < 10 s)
+     .is-ready pulse ring visible (lunge off cooldown)
+   -------------------------------------------------------------------------- */
+
+.fr-vampire {
+  --rn: 18;
+  --lunge: 0;
+  --flare: 1;
+  --glow: 6px;
+  --hx: 0.25;                              /* head centre (r-units)         */
+}
+
+.fr-vampire .fr-rot {
+  transform: rotate(var(--facing))
+    scale(calc(1 + var(--lunge) * 0.35), calc(1 - var(--lunge) * 0.25));
+}
+.fr-vampire.is-stun .fr-rot { animation: fr-stun-shake 0.157s linear infinite; }
+
+/* Cape: moveTo(-.2,-1.05) Q(-1.6f,-.9f)→(-1.9f,-.3) L(-1.45f,0) L(-1.9f,.3)
+         Q(-1.6f,.9f)→(-.2,1.05).  Box x∈[-1.9,-.2] y∈[-1.05,1.05] at f=1.
+         Flare is applied as a scale about the attachment edge (x=-.2). */
+.fr-vampire__cape {
+  --x: -1.05; --w: 1.7; --y: 0; --h: 2.1;
+  background: var(--fr-p-night-850);
+  transform-origin: 100% 50%;
+  transform: scale(var(--flare));
+  clip-path: polygon(100% 0%, 33.8% 12.5%, 0% 35.7%, 26.5% 50%, 0% 64.3%, 33.8% 87.5%, 100% 100%);
+}
+/* Cape lining (#8b0f1f): (-.3,-.8) Q(-1.3f,-.5f)→(-1.4f,0) … mirrored */
+.fr-vampire__lining {
+  --x: -0.85; --w: 1.1; --y: 0; --h: 1.6;
+  background: var(--fr-p-blood-800);
+  transform-origin: 100% 50%;
+  transform: scale(var(--flare));
+  clip-path: polygon(100% 0%, 29.5% 21.9%, 0% 50%, 29.5% 78.1%, 100% 100%);
+}
+/* Body: ellipse(0,0, .95r, 1.1r) */
+.fr-vampire__body {
+  --w: 1.9; --h: 2.2;
+  border-radius: 50%;
+  background: var(--fr-p-night-750);
+}
+.fr-vampire.is-flash .fr-vampire__body { background: var(--fr-p-white); }
+/* Collar (#c4162b): two triangles, top (-.1,-1.05)(.55,-.55)(.15,-.35) */
+.fr-vampire__collar {
+  --w: 0.65; --h: 0.7;
+  background: var(--fr-p-blood-600);
+}
+.fr-vampire__collar--top {
+  --x: 0.225; --y: -0.7;
+  clip-path: polygon(0% 0%, 100% 71.4%, 38.5% 100%);
+}
+.fr-vampire__collar--bottom {
+  --x: 0.225; --y: 0.7;
+  clip-path: polygon(0% 100%, 100% 28.6%, 38.5% 0%);
+}
+/* Head: arc(hx, 0, .66r) in bone */
+.fr-vampire__head {
+  --x: var(--hx); --w: 1.32; --h: 1.32;
+  border-radius: 50%;
+  background: var(--fr-p-bone-100);
+}
+/* Hair back half: arc 0.55π→1.45π + apex (hx-.05r, 0), polygon on head box */
+.fr-vampire__hair {
+  --x: var(--hx); --w: 1.32; --h: 1.32;
+  border-radius: 50%;
+  background: var(--fr-p-night-900);
+  clip-path: polygon(42.2% 99.4%, 25% 93.3%, 6.7% 75%, 0% 50%, 6.7% 25%, 25% 6.7%, 42.2% 0.6%, 46.2% 50%);
+}
+/* Widow's peak: (hx-.2,-.62)(hx+.25,0)(hx-.2,.62)(hx-.5,0) */
+.fr-vampire__peak {
+  --x: calc(var(--hx) - 0.125); --w: 0.75; --y: 0; --h: 1.24;
+  background: var(--fr-p-night-900);
+  clip-path: polygon(40% 0%, 100% 50%, 40% 100%, 0% 50%);
+}
+/* Eyes: two discs radius .11r at (hx+.42, ±.24), glowing */
+.fr-vampire__eye {
+  --x: calc(var(--hx) + 0.42); --w: 0.22; --h: 0.22;
+  border-radius: 50%;
+  background: var(--fr-p-blood-300);
+  box-shadow: 0 0 var(--glow) var(--fr-p-blood-300);
+}
+.fr-vampire__eye--l { --y: -0.24; }
+.fr-vampire__eye--r { --y: 0.24; }
+/* Fangs: (.62,-.12)(.82,-.06)(.62,0) and mirror, relative to hx */
+.fr-vampire__fang {
+  --x: calc(var(--hx) + 0.72); --w: 0.2; --h: 0.12;
+  background: var(--fr-p-white);
+  display: none;
+}
+.fr-vampire.is-fangs .fr-vampire__fang { display: block; }
+.fr-vampire__fang--l { --y: -0.06; clip-path: polygon(0% 0%, 100% 50%, 0% 100%); }
+.fr-vampire__fang--r { --y: 0.06;  clip-path: polygon(0% 100%, 100% 50%, 0% 0%); }
+/* Lunge-ready ring: arc(r + 8), stroke 2 #ff3b4a, alpha .18–.34, sin(6t) */
+.fr-vampire__ready {
+  position: absolute;
+  display: none;
+  inset: calc(var(--r) * 2 - var(--r) - 8px);
+  border: 2px solid var(--fr-p-blood-400);
+  border-radius: 50%;
+  opacity: 0.26;
+  animation: fr-ready-pulse 1.047s ease-in-out infinite;
+}
+.fr-vampire.is-ready .fr-vampire__ready { display: block; }
+
+/* --------------------------------------------------------------------------
+   2. VILLAGERS  (drawVillager, r by type)
+   Draw order: aura (hunter) → [rot] body → arms (panic) → head → hair →
+               accessory → eyes
+   Shared geometry (r-units):
+     body  ellipse 0.9 × 1.0          head disc Ø1.2 at x = 0.2
+     hair  back half of head          eyes Ø3 px (Ø4.4 px when panicking)
+   Modifiers: .is-panic (squash 1.08 × 0.94, flailing arms, bigger eyes)
+              .is-flash (body white after a bite)
+   -------------------------------------------------------------------------- */
+
+.fr-villager {
+  --rn: 15;
+  --body: var(--fr-p-peasant-body);
+  --head: var(--fr-p-peasant-head);
+  --hair: var(--fr-p-peasant-hair);
+  --eye: 1.5;                             /* px radius                      */
+  --hx: 0.2;
+}
+.fr-villager--peasant { --rn: 15; }
+.fr-villager--runner {
+  --rn: 14;
+  --body: var(--fr-p-runner-body);
+  --head: var(--fr-p-runner-head);
+  --hair: var(--fr-p-runner-hair);
+}
+.fr-villager--noble {
+  --rn: 16;
+  --body: var(--fr-p-noble-body);
+  --head: var(--fr-p-noble-head);
+  --hair: var(--fr-p-noble-hair);
+}
+.fr-villager--hunter {
+  --rn: 17;
+  --body: var(--fr-p-hunter-body);
+  --head: var(--fr-p-hunter-head);
+  --hair: var(--fr-p-hunter-hair);
+}
+.fr-villager.is-panic { --eye: 2.2; }
+.fr-villager.is-panic .fr-rot { transform: rotate(var(--facing)) scale(1.08, 0.94); }
+
+.fr-villager__body {
+  --w: 1.8; --h: 2;
+  border-radius: 50%;
+  background: var(--body);
+}
+.fr-villager.is-flash .fr-villager__body { background: var(--fr-p-white); }
+
+/* Arms (panic only, not hunters): 3.5 px round strokes from (0, ∓.7r) to
+   (.5r, ∓1.3r) — length .781 r, angle ∓50.2° — in head colour. */
+.fr-villager__arm {
+  display: none;
+  position: absolute;
+  left: calc(var(--r) * 2);
+  height: 3.5px;
+  width: calc(var(--r) * 0.781);
+  border-radius: 2px;
+  background: var(--head);
+  transform-origin: 0 50%;
+}
+.fr-villager__arm--l { top: calc(var(--r) * (2 - 0.7) - 1.75px); transform: rotate(-50.2deg); }
+.fr-villager__arm--r { top: calc(var(--r) * (2 + 0.7) - 1.75px); transform: rotate(50.2deg); }
+.fr-villager.is-panic:not(.fr-villager--hunter) .fr-villager__arm { display: block; }
+.fr-villager.is-panic:not(.fr-villager--hunter) .fr-villager__arm--l { animation: fr-arm-l 0.262s ease-in-out infinite; }
+.fr-villager.is-panic:not(.fr-villager--hunter) .fr-villager__arm--r { animation: fr-arm-r 0.262s ease-in-out infinite; }
+
+.fr-villager__head {
+  --x: var(--hx); --w: 1.2; --h: 1.2;
+  border-radius: 50%;
+  background: var(--head);
+}
+.fr-villager__hair {
+  --x: var(--hx); --w: 1.2; --h: 1.2;
+  border-radius: 50%;
+  background: var(--hair);
+  clip-path: inset(0 50% 0 0);             /* arc π/2 → 3π/2 = left half    */
+}
+
+/* Accessory slot — one element, styled per type */
+.fr-villager__acc { display: none; }
+
+/* Noble crown (#ffd24a): 7-point polygon left of the head */
+.fr-villager--noble .fr-villager__acc {
+  display: block;
+  --x: -0.325; --y: 0; --w: 0.55; --h: 0.7;
+  background: var(--fr-p-gold-crown);
+  clip-path: polygon(45.5% 0%, 100% 35.7%, 45.5% 50%, 100% 64.3%, 45.5% 100%, 0% 85.7%, 0% 14.3%);
+}
+/* Runner headband (#e23b3b): rect(hx-.1, -.62, .22, 1.24) r */
+.fr-villager--runner .fr-villager__acc {
+  display: block;
+  --x: calc(var(--hx) + 0.01); --y: 0; --w: 0.22; --h: 1.24;
+  background: var(--fr-p-runner-band);
+}
+/* Hunter hat: brim disc Ø1.7 (#1d1410) + crown disc Ø1.0 (#2f221a) + band
+   rect 1.1 × .2 (#8b1a1a). The crown and band are the ::before/::after. */
+.fr-villager--hunter .fr-villager__acc {
+  display: block;
+  --x: var(--hx); --y: 0; --w: 1.7; --h: 1.7;
+  border-radius: 50%;
+  background: var(--fr-p-hunter-hat-brim);
+}
+.fr-villager--hunter .fr-villager__acc::before,
+.fr-villager--hunter .fr-villager__acc::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.fr-villager--hunter .fr-villager__acc::before {
+  width: calc(100% * 1 / 1.7);
+  height: calc(100% * 1 / 1.7);
+  border-radius: 50%;
+  background: var(--fr-p-hunter-hat-crown);
+}
+.fr-villager--hunter .fr-villager__acc::after {
+  width: calc(100% * 1.1 / 1.7);
+  height: calc(100% * 0.2 / 1.7);
+  background: var(--fr-p-hunter-hat-band);
+}
+
+/* Eyes: radius 1.5 px (2.2 px when panicking) at (hx + .4r, ±.22r) */
+.fr-villager__eye {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  background: var(--fr-p-eye-ink);
+  width: calc(var(--eye) * 2px);
+  height: calc(var(--eye) * 2px);
+  left: calc(var(--r) * (2 + var(--hx) + 0.4) - var(--eye) * 1px);
+}
+.fr-villager__eye--l { top: calc(var(--r) * (2 - 0.22) - var(--eye) * 1px); }
+.fr-villager__eye--r { top: calc(var(--r) * (2 + 0.22) - var(--eye) * 1px); }
+
+/* Hunter danger aura: dashed ring r+14, stroke 2, #d9f0a3, dash 6/6 px,
+   rotates 2 rad/s, radius breathes ±3 px, alpha .25–.45 (sin 5t). Not rotated
+   with the entity. The ring is masked out of a repeating conic gradient so
+   the dash length stays exactly 6 px on the circumference. */
+.fr-hunter-aura {
+  --ring: calc(var(--rn) + 14);                        /* unitless px       */
+  --dash: calc(6 / var(--ring) * 57.2958deg);          /* 6 px as an angle  */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc((var(--ring) + 1) * 2px);
+  height: calc((var(--ring) + 1) * 2px);
+  margin: calc((var(--ring) + 1) * -1px) 0 0 calc((var(--ring) + 1) * -1px);
+  border-radius: 50%;
+  background: repeating-conic-gradient(var(--fr-p-garlic-200) 0 var(--dash), transparent 0 calc(var(--dash) * 2));
+  -webkit-mask: radial-gradient(circle closest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+          mask: radial-gradient(circle closest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  opacity: 0.35;
+  animation: fr-aura 3.142s linear infinite, fr-aura-breathe 1.257s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------------------
+   3. CORPSE  (drawCorpse, r by victim type; fades after 6 s over 3 s)
+   rotation = facing + 90° + seed·0.6   → set --facing accordingly
+   Draw order: drop shadow → body → head → X eyes → bite marks
+   -------------------------------------------------------------------------- */
+
+.fr-corpse {
+  --rn: 15;
+  --body: var(--fr-p-peasant-body);
+  --alpha: 1;                              /* clamp(1 − (corpseT − 6)/3)    */
+  opacity: var(--alpha);
+}
+.fr-corpse--runner { --rn: 14; --body: var(--fr-p-runner-body); }
+.fr-corpse--noble  { --rn: 16; --body: var(--fr-p-noble-body); }
+.fr-corpse--hunter { --rn: 17; --body: var(--fr-p-hunter-body); }
+
+.fr-corpse__shadow {
+  position: absolute;
+  left: calc(var(--r) * (2 - 1.3) + 2px - 0px);
+  top: calc(var(--r) * (2 - 0.8) + 3px);
+  width: calc(var(--r) * 2.6);
+  height: calc(var(--r) * 1.6);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.25);
+}
+.fr-corpse__body { --w: 2.5; --h: 1.5; border-radius: 50%; background: var(--body); }
+.fr-corpse__head { --x: 1.1; --w: 1.1; --h: 1.1; border-radius: 50%; background: var(--fr-p-bone-200); }
+/* X eyes: two 4×4 px crosses, 1.5 px #333, at (ex−5…ex−1) and (ex+1…ex+5), y −4…0 */
+.fr-corpse__x {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  top: calc(var(--r) * 2 - 4px);
+  background:
+    linear-gradient(45deg, transparent calc(50% - 0.75px), var(--fr-p-corpse-eye) calc(50% - 0.75px) calc(50% + 0.75px), transparent calc(50% + 0.75px)),
+    linear-gradient(-45deg, transparent calc(50% - 0.75px), var(--fr-p-corpse-eye) calc(50% - 0.75px) calc(50% + 0.75px), transparent calc(50% + 0.75px));
+}
+.fr-corpse__x--l { left: calc(var(--r) * 3.1 - 5px); }
+.fr-corpse__x--r { left: calc(var(--r) * 3.1 + 1px); }
+/* Bite marks: two Ø4 px discs at (.55r, +3 px) and (.55r, +8 px), #b3121f */
+.fr-corpse__bite {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--fr-p-blood-wound);
+  left: calc(var(--r) * 2.55 - 2px);
+}
+.fr-corpse__bite--a { top: calc(var(--r) * 2 + 3px - 2px); }
+.fr-corpse__bite--b { top: calc(var(--r) * 2 + 8px - 2px); }
+
+/* --------------------------------------------------------------------------
+   4. PROPS / OBSTACLES  (anchor = prop centre; all numbers are px)
+   -------------------------------------------------------------------------- */
+
+/* ---- Tree trunk (base layer, r = 24 collision) --------------------------- */
+.fr-tree-shadow { --cx: 10; --cy: 12; --rx: 50; --ry: 30; background: rgba(0, 0, 0, 0.4); }
+.fr-tree-trunk  { --cx: 0;  --cy: 0;  --rx: 14; --ry: 14; background: var(--fr-p-trunk); }
+.fr-tree-core   { --cx: -3; --cy: -3; --rx: 8;  --ry: 8;  background: var(--fr-p-trunk-core); }
+
+/* ---- Tree canopy (drawn above every entity; sways ±3 px, period 4.83 s) - */
+.fr-canopy { animation: fr-sway 4.833s ease-in-out infinite; }
+.fr-canopy > .fr-abs { opacity: 0.92; }
+.fr-canopy-1 { --cx: 0;   --cy: -6;  --rx: 52; --ry: 52; background: var(--fr-p-canopy-1); }
+.fr-canopy-2 { --cx: -10; --cy: -14; --rx: 34; --ry: 34; background: var(--fr-p-canopy-2); }
+.fr-canopy-3 { --cx: 16;  --cy: -2;  --rx: 30; --ry: 30; background: var(--fr-p-canopy-2); }
+.fr-canopy-4 { --cx: -16; --cy: -22; --rx: 14; --ry: 14; background: var(--fr-p-canopy-3); }
+
+/* ---- Fountain (r = 58) --------------------------------------------------- */
+.fr-fountain-shadow { --cx: 6; --cy: 8; --rx: 58; --ry: 58; background: rgba(0, 0, 0, 0.35); }
+.fr-fountain-rim    { --cx: 0; --cy: 0; --rx: 58; --ry: 58; background: var(--fr-p-fountain-rim); }
+.fr-fountain-water  { --cx: 0; --cy: 0; --rx: 46; --ry: 46; background: var(--fr-p-fountain-water); }
+.fr-fountain-core   { --cx: 0; --cy: 0; --rx: 12; --ry: 12; background: var(--fr-p-fountain-core); }
+.fr-fountain-glint  { --cx: 0; --cy: 0; --rx: 5;  --ry: 5;  background: var(--fr-p-blood-fountain); }
+/* Ripples: radius 4→46 px every 2.33 s, three rings 0.78 s apart,
+   alpha 1 − r/46, 2 px stroke rgba(160,200,255,.35) */
+.fr-fountain-ripple {
+  position: absolute;
+  left: -46px;
+  top: -46px;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  border: 2px solid var(--fr-p-fountain-ripple);
+  animation: fr-ripple 2.333s linear infinite;
+}
+.fr-fountain-ripple:nth-of-type(1) { animation-delay: 0s; }
+.fr-fountain-ripple:nth-of-type(2) { animation-delay: -0.778s; }
+.fr-fountain-ripple:nth-of-type(3) { animation-delay: -1.556s; }
+
+/* ---- Crypt (r = 50; 100 × 80 block) --------------------------------------- */
+.fr-crypt-shadow { --x: -44; --y: -34; --w: 100; --h: 84; background: rgba(0, 0, 0, 0.45); }
+.fr-crypt-wall   { --x: -50; --y: -40; --w: 100; --h: 80; background: var(--fr-p-crypt-wall); }
+.fr-crypt-face   { --x: -44; --y: -34; --w: 88;  --h: 68; background: var(--fr-p-crypt-face); }
+.fr-crypt-door   { --x: -14; --y: 6;   --w: 28;  --h: 28; background: var(--fr-p-crypt-door); }
+.fr-crypt-cross-v { --x: -3;  --y: -30; --w: 6;  --h: 26; background: var(--fr-p-crypt-cross); }
+.fr-crypt-cross-h { --x: -12; --y: -22; --w: 24; --h: 6;  background: var(--fr-p-crypt-cross); }
+/* door glow: rgba(120,255,160, .15 + pulse·.15), pulse = (sin(2t+seed)+1)/2 */
+.fr-crypt-glow {
+  --x: -10; --y: 10; --w: 20; --h: 20;
+  background: rgba(var(--fr-p-crypt-glow), 0.3);
+  animation: fr-crypt-glow 3.142s ease-in-out infinite;
+}
+
+/* ---- Gravestone (static decoration baked into the ground layer) ---------- */
+.fr-grave-shadow { --x: -10; --y: -6;  --w: 22; --h: 16; background: rgba(0, 0, 0, 0.35); }
+.fr-grave-stone  { --x: -9;  --y: -10; --w: 18; --h: 22; background: var(--fr-p-grave); border-radius: 4px; }
+.fr-grave-cross-h { --x: -3; --y: -6;  --w: 6;  --h: 2;  background: var(--fr-p-grave-mark); }
+.fr-grave-cross-v { --x: -1; --y: -8;  --w: 2;  --h: 8;  background: var(--fr-p-grave-mark); }
+
+/* --------------------------------------------------------------------------
+   5. PARTICLES & FEEDBACK  (px; anchor = particle centre)
+   `--s` is the particle `size` value from engine.ts `burst()`.
+   -------------------------------------------------------------------------- */
+
+.fr-ptcl { position: absolute; display: block; box-sizing: border-box; pointer-events: none; }
+
+/* blood: Ø 2·size → shrinks to ½ (radius size·(.5 + .5f)), alpha min(1, 1.5f) */
+.fr-ptcl--blood {
+  --s: 4;
+  width: calc(var(--s) * 2px);
+  height: calc(var(--s) * 2px);
+  margin: calc(var(--s) * -1px) 0 0 calc(var(--s) * -1px);
+  border-radius: 50%;
+  background: var(--fr-fx-blood);
+  animation: fr-blood 0.6s ease-out both;
+}
+/* spark: rect 2.2·size × 0.7·size, rotated, fades linearly */
+.fr-ptcl--spark {
+  --s: 3;
+  --rot: 0deg;
+  width: calc(var(--s) * 2.2px);
+  height: calc(var(--s) * 0.7px);
+  margin: calc(var(--s) * -0.35px) 0 0 calc(var(--s) * -1px);
+  background: var(--fr-fx-spark);
+  transform: rotate(var(--rot));
+  animation: fr-fade 0.5s linear both;
+}
+/* garlic puff: disc r = size, grows +12 px/s, rgba(230,240,200,.8) */
+.fr-ptcl--garlic {
+  --s: 8;
+  width: calc(var(--s) * 2px);
+  height: calc(var(--s) * 2px);
+  margin: calc(var(--s) * -1px) 0 0 calc(var(--s) * -1px);
+  border-radius: 50%;
+  background: var(--fr-fx-garlic);
+  animation: fr-puff 0.8s ease-out both;
+}
+/* dust puff: disc r = size, grows, rgba(180,170,160,.45) */
+.fr-ptcl--dust {
+  --s: 6;
+  width: calc(var(--s) * 2px);
+  height: calc(var(--s) * 2px);
+  margin: calc(var(--s) * -1px) 0 0 calc(var(--s) * -1px);
+  border-radius: 50%;
+  background: var(--fr-fx-dust);
+  animation: fr-puff 0.45s ease-out both;
+}
+/* ring: radius size → size+70 in 0.35 s, stroke 4→1 px, alpha = life */
+.fr-ptcl--ring {
+  --s: 10;
+  --c: var(--fr-p-blood-400);
+  width: calc((var(--s) + 70) * 2px);
+  height: calc((var(--s) + 70) * 2px);
+  margin: calc((var(--s) + 70) * -1px) 0 0 calc((var(--s) + 70) * -1px);
+  border-radius: 50%;
+  border: 3px solid var(--c);
+  animation: fr-ring 0.35s ease-out both;
+}
+.fr-ptcl--ring-gold { --c: var(--fr-p-gold-400); }
+.fr-ptcl--ring-garlic { --c: var(--fr-p-garlic-100); }
+
+/* bat: quadratic wings → 8-point polygon; 2.6 s × 0.75 s, colour #0b0610 */
+.fr-bat {
+  --s: 8;
+  position: absolute;
+  display: block;
+  width: calc(var(--s) * 2.6px);
+  height: calc(var(--s) * 0.75px);
+  margin: calc(var(--s) * -0.45px) 0 0 calc(var(--s) * -1.3px);
+  background: #0b0610;
+  clip-path: polygon(50% 60%, 26% 0%, 0% 33.3%, 27.9% 56.7%, 50% 100%, 72.1% 56.7%, 100% 33.3%, 74% 0%);
+  transform-origin: 50% 60%;
+  animation: fr-flap 0.21s ease-in-out infinite;
+}
+
+/* Floating text (addText): Cinzel 900, 4 px outline, rises 70 px/s with drag */
+.fr-float {
+  --size: 22px;
+  --c: var(--fr-text-gain);
+  --o: rgba(0, 0, 0, 0.85);
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font: var(--fr-p-weight-black) var(--size) / 1 var(--fr-font-display);
+  color: var(--c);
+  -webkit-text-stroke: 4px var(--o);
+  paint-order: stroke fill;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: fr-float-up 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+.fr-float--time   { --size: 22px; --c: var(--fr-p-green-300); }              /* +3s / +5s   */
+.fr-float--points { --size: 20px; --c: var(--fr-p-gold-400); }               /* +100 …      */
+.fr-float--label  { --size: 16px; --c: var(--fr-p-violet-300); }             /* NOBLE +5s   */
+.fr-float--hurt   { --size: 24px; --c: var(--fr-p-red-soft); }               /* -5s GARLIC! */
+.fr-float--alert  { --size: 24px; --c: var(--fr-p-yellow-alert); }           /* !           */
+.fr-float--cross  { --size: 22px; --c: var(--fr-p-garlic-100); }             /* ✝           */
+.fr-float--combo  { --size: 18px; --c: var(--fr-p-white); --o: rgba(120, 0, 20, 0.9); }
+.fr-float--combo-max { --c: var(--fr-p-pink-hot); }                          /* combo ≥ 10  */
+
+/* Lunge trail dot: r = 18 · a · 1.4 with a: .6 → 0, rgba(160,20,40,a·.5) */
+.fr-trail {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border-radius: 50%;
+  background: rgba(160, 20, 40, 0.3);
+  animation: fr-trail 0.15s linear both;
+}
+
+/* Touch joystick (drawn over the canvas): ring Ø112, knob Ø44 */
+.fr-joy {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border: 2px solid var(--fr-p-white);
+  border-radius: 50%;
+  opacity: 0.35;
+  pointer-events: none;
+}
+.fr-joy::after {
+  content: "";
+  position: absolute;
+  left: calc(50% + var(--jx, 0) * 56px - 22px);
+  top: calc(50% + var(--jy, 0) * 56px - 22px);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--fr-p-blood-400);
+  opacity: calc(0.55 / 0.35);
+}
+
+/* --------------------------------------------------------------------------
+   6. SCREEN EFFECTS  (full-viewport overlays, in canvas draw order)
+   -------------------------------------------------------------------------- */
+
+.fr-fx { position: absolute; inset: 0; pointer-events: none; }
+
+/* vignette: radial gradient 35 % → 100 % of the centre-to-corner distance */
+.fr-fx--vignette {
+  background: radial-gradient(circle farthest-corner at 50% 50%, rgba(8, 2, 16, 0) 35%, var(--fr-fx-vignette-edge) 100%);
+}
+/* low-time pulse (time < 10 s): a = (.12 + pulse·.2)·(1 − time/10) — set --a */
+.fr-fx--lowtime {
+  --a: 0.2;
+  background: radial-gradient(circle 70vmax at 50% 50%, rgba(var(--fr-fx-lowtime), 0) 25vmin, rgba(var(--fr-fx-lowtime), var(--a)) 70vmax);
+}
+/* hit flash (garlic): rgba(200,10,30, flashRed·.35), flashRed 0.6 → 0 at 2/s */
+.fr-fx--flash-red {
+  background: rgba(200, 10, 30, 0.21);
+  animation: fr-flash 0.3s linear both;
+}
+/* bite flash: rgba(255,240,240, flashWhite·.5), 0.12 → 0 at 3/s */
+.fr-fx--flash-white {
+  background: rgba(255, 240, 240, 0.06);
+  animation: fr-flash 0.04s linear both;
+}
+
+/* --------------------------------------------------------------------------
+   7. WORLD  (buildBackground — 2200 × 2200 px ground layer)
+   Use as  <div class="fr-world"> … </div>  and clip/scale it as a minimap or
+   a backdrop.  Stone texture: 26 px tiles with 2 px joints, shade 45–70.
+   -------------------------------------------------------------------------- */
+
+.fr-world {
+  position: relative;
+  width: 2200px;
+  height: 2200px;
+  overflow: hidden;
+  background-color: var(--fr-p-grass-base);
+  background-image:
+    radial-gradient(ellipse 120px 70px at 18% 22%, var(--fr-p-dirt), transparent 100%),
+    radial-gradient(ellipse 90px 50px at 72% 14%, var(--fr-p-dirt), transparent 100%),
+    radial-gradient(ellipse 110px 60px at 30% 78%, var(--fr-p-dirt), transparent 100%),
+    radial-gradient(ellipse 80px 45px at 84% 66%, var(--fr-p-dirt), transparent 100%),
+    radial-gradient(circle 350px at 28% 30%, var(--fr-p-moon), transparent 100%),
+    radial-gradient(circle 300px at 70% 70%, var(--fr-p-moon), transparent 100%),
+    radial-gradient(circle 1px at 7px 7px, var(--fr-p-grass-light) 99%, transparent 100%),
+    radial-gradient(circle 1px at 19px 13px, var(--fr-p-grass-dark) 99%, transparent 100%);
+  background-size: auto, auto, auto, auto, auto, auto, 23px 23px, 29px 29px;
+}
+.fr-stone {
+  background:
+    linear-gradient(to right, var(--fr-p-mortar) 2px, transparent 2px calc(100% - 0px)),
+    linear-gradient(to bottom, var(--fr-p-mortar) 2px, transparent 2px calc(100% - 0px)),
+    var(--fr-p-stone-mid);
+  background-size: 26px 26px, 26px 26px, auto;
+}
+.fr-world__path-v { position: absolute; left: 1015px; top: 0; width: 170px; height: 2200px; }
+.fr-world__path-h { position: absolute; left: 0; top: 1015px; width: 2200px; height: 170px; }
+.fr-world__plaza  { position: absolute; left: 650px; top: 650px; width: 900px; height: 900px; }
+/* plaza ring: arc r = 300, stroke 6, rgba(120,120,150,.35) */
+.fr-world__ring {
+  position: absolute;
+  left: 800px;
+  top: 800px;
+  width: 600px;
+  height: 600px;
+  border: 6px solid var(--fr-p-plaza-ring);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+/* border wall: 40 px #3b2f3a band + 6 px #2a1f2a rim */
+.fr-world__wall {
+  position: absolute;
+  inset: 0;
+  border: 40px solid var(--fr-p-wall-outer);
+  box-shadow: inset 0 0 0 6px var(--fr-p-wall-inner);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+/* blood stain baked into the ground: rgba(90…130, 8, 14, .75), r 10–18 px */
+.fr-stain {
+  --s: 14;
+  position: absolute;
+  width: calc(var(--s) * 2px);
+  height: calc(var(--s) * 1.5px);
+  margin: calc(var(--s) * -0.75px) 0 0 calc(var(--s) * -1px);
+  border-radius: 50%;
+  background: rgba(110, var(--fr-p-stain-rgb-g), var(--fr-p-stain-rgb-b), 0.75);
+}
+
+/* --------------------------------------------------------------------------
+   8. KEYFRAMES
+   -------------------------------------------------------------------------- */
+
+@keyframes fr-stun-shake {                 /* rotate(sin(40t)·.15 rad)      */
+  0%   { transform: rotate(calc(var(--facing) + 0deg)); }
+  25%  { transform: rotate(calc(var(--facing) + 8.6deg)); }
+  75%  { transform: rotate(calc(var(--facing) - 8.6deg)); }
+  100% { transform: rotate(calc(var(--facing) + 0deg)); }
+}
+@keyframes fr-ready-pulse { 0%, 100% { opacity: 0.18; } 50% { opacity: 0.34; } }
+@keyframes fr-arm-l { 0%, 100% { transform: rotate(-50.2deg) translateY(-1px); } 50% { transform: rotate(-46deg) translateY(1px); } }
+@keyframes fr-arm-r { 0%, 100% { transform: rotate(50.2deg) translateY(1px); } 50% { transform: rotate(46deg) translateY(-1px); } }
+@keyframes fr-aura { to { transform: rotate(360deg); } }
+@keyframes fr-aura-breathe {
+  0%, 100% { opacity: 0.25; scale: 0.96; }
+  50%      { opacity: 0.45; scale: 1.04; }
+}
+@keyframes fr-sway { 0%, 100% { transform: translateX(-3px); } 50% { transform: translateX(3px); } }
+@keyframes fr-ripple {
+  from { transform: scale(0.087); opacity: 0.91; }
+  to   { transform: scale(1);     opacity: 0; }
+}
+@keyframes fr-crypt-glow {
+  0%, 100% { background: rgba(var(--fr-p-crypt-glow), 0.15); }
+  50%      { background: rgba(var(--fr-p-crypt-glow), 0.3); }
+}
+@keyframes fr-blood { from { transform: scale(1); opacity: 1; } to { transform: scale(0.5); opacity: 0; } }
+@keyframes fr-fade  { from { opacity: 1; } to { opacity: 0; } }
+@keyframes fr-puff  { from { transform: scale(1); opacity: 1; } to { transform: scale(1.8); opacity: 0; } }
+@keyframes fr-ring  { from { transform: scale(0.12); opacity: 1; border-width: 4px; } to { transform: scale(1); opacity: 0; border-width: 1px; } }
+@keyframes fr-flap  { 0%, 100% { transform: scaleY(0.6); } 50% { transform: scaleY(1.7); } }
+@keyframes fr-float-up {
+  0%   { transform: translate(-50%, -50%) scale(1.6); opacity: 1; }
+  20%  { transform: translate(-50%, calc(-50% - 14px)) scale(1); opacity: 1; }
+  60%  { opacity: 1; }
+  100% { transform: translate(-50%, calc(-50% - 50px)) scale(1); opacity: 0; }
+}
+@keyframes fr-trail { from { transform: scale(1); opacity: 1; } to { transform: scale(0); opacity: 0; } }
+@keyframes fr-flash { from { opacity: 1; } to { opacity: 0; } }
+
+/* Looping decoration stops under reduced motion; one-shot FX are shortened. */
+@media (prefers-reduced-motion: reduce) {
+  .fr-hunter-aura,
+  .fr-bat,
+  .fr-canopy,
+  .fr-fountain-ripple,
+  .fr-crypt-glow,
+  .fr-vampire__ready,
+  .fr-vampire.is-stun .fr-rot,
+  .fr-villager__arm { animation: none !important; }
+}
